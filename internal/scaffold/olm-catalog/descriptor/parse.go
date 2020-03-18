@@ -16,6 +16,7 @@ package descriptor
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,11 +43,15 @@ type descriptor struct {
 	olmapiv1alpha1.SpecDescriptor
 	include  bool
 	descType descriptorType
+	index    uint64
 }
 
 func sortDescriptors(ds []descriptor) []descriptor {
 	sort.Slice(ds, func(i, j int) bool {
-		return ds[i].Path < ds[j].Path
+		if ds[i].index == ds[j].index {
+			return ds[i].Path < ds[j].Path
+		}
+		return ds[i].index < ds[j].index
 	})
 	return ds
 }
@@ -70,7 +75,7 @@ func sortResources(rs []olmapiv1alpha1.APIResourceReference) []olmapiv1alpha1.AP
 // parsedCRDDescriptions.
 func parseCSVGenAnnotations(comments []string) (pd parsedCRDDescriptions, err error) {
 	tags := types.ExtractCommentTags(csvgenPrefix, comments)
-	specd, statusd := descriptor{descType: typeSpec}, descriptor{descType: typeStatus}
+	specd, statusd := descriptor{descType: typeSpec, index: math.MaxUint64}, descriptor{descType: typeStatus, index: math.MaxUint64}
 	for path, vals := range tags {
 		pathElems, err := annotations.SplitPath(path)
 		if err != nil {
@@ -138,6 +143,11 @@ func parseMemberAnnotation(d *descriptor, pathElems []string, val string) (err e
 				return fmt.Errorf("error unquoting field x-descriptors %s: %v", val, err)
 			}
 			d.XDescriptors = strings.Split(xdStr, ",")
+		case "index":
+			d.index, err = strconv.ParseUint(val, 10, 0)
+			if err != nil {
+				return fmt.Errorf("error parsing field index %s: %v", val, err)
+			}
 		default:
 			return fmt.Errorf("unsupported descriptor path element %s", pathElems[1])
 		}
